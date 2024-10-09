@@ -2,7 +2,7 @@
 #pip install requests
 #pip install pyaudio
 
-import speech_recognition as sr
+import Speech_recognition as sr
 
 
 # 音声をマイクから取得してテキストに変換する関数
