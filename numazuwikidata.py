@@ -1,72 +1,48 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 
-def fetch_wikipedia_data_via_api(title):
-    # 日本語版WikipediaのAPIエンドポイント
-    url = "https://ja.wikipedia.org/w/api.php"
+def fetch_wikipedia_sections(title):
+    # WikipediaページのURL
+    url = f"https://ja.wikipedia.org/wiki/{title}"
+
+    # WikipediaページのHTMLを取得
+    response = requests.get(url)
     
-    # タイトルはエンコードせずそのまま送信
-    params = {
-        "action": "query",
-        "format": "json",
-        "titles": title,  # エンコードせずにそのまま使用
-        "prop": "extracts",
-        "exintro": True,
-        "explaintext": True,  # このプロパティを使うためには "extracts" を指定する必要がある
-    }
-
-    # APIリクエストを送信
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # HTTPエラーが発生した場合に例外を発生させる
-    except requests.exceptions.HTTPError as http_err:
-        print(f"HTTPエラーが発生しました: {http_err}")
-        return None
-    except Exception as err:
-        print(f"エラーが発生しました: {err}")
+    if response.status_code != 200:
+        print(f"ページの取得に失敗しました: {response.status_code}")
         return None
 
-    # レスポンスの内容を確認
-    try:
-        data = response.json()
-        print(f"APIから取得したデータ: {data}")  # デバッグ用に表示
+    # BeautifulSoupでHTMLを解析
+    soup = BeautifulSoup(response.content, 'html.parser')
 
-        pages = data['query']['pages']
-        page_id = next(iter(pages))
-        page = pages[page_id]
+    # ページ内のセクションタイトルと内容を抽出
+    sections = {}
+    current_section = None
 
-        # ページが見つかったかどうかを確認
-        if "missing" in page:
-            print(f"ページが見つかりません: {title}")
-            return None
+    # Wikipediaのセクションはh2やh3タグで表示されているため、それを抽出
+    for tag in soup.find_all(['h2', 'h3', 'p']):
+        # セクションのタイトル（h2, h3）を取得
+        if tag.name in ['h2', 'h3']:
+            current_section = tag.text.strip().replace("[編集]", "")  # [編集]を削除
+            sections[current_section] = ""
+        elif current_section and tag.name == 'p':  # 段落（pタグ）を現在のセクションに追加
+            sections[current_section] += tag.text.strip()
 
-        # JSON形式でデータをまとめる
-        result = {
-            "title": page.get('title', title),  # 元の日本語タイトルを使う
-            "summary": page.get('extract', '概要がありません')
-        }
-        return result
-    except KeyError as key_err:
-        print(f"必要なデータが見つかりません: {key_err}")
-        return None
-    except json.JSONDecodeError as json_err:
-        print(f"JSONデコードエラーが発生しました: {json_err}")
-        return None
-    except Exception as err:
-        print(f"不明なエラーが発生しました: {err}")
-        return None
+    return sections
 
+# JSONファイルとして保存する関数
 def save_to_json(data, filename):
-    if data is not None:
+    if data:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         print(f"{filename} にJSONファイルが正常に保存されました！")
     else:
         print("データがありませんでした。JSONファイルを作成できません。")
 
-# Wikipediaページを指定してデータを取得（日本語タイトル）
+# Wikipediaページからセクションデータを取得
 title = "沼津工業高等専門学校"
-wikipedia_data = fetch_wikipedia_data_via_api(title)
+sections_data = fetch_wikipedia_sections(title)
 
 # データが取得できた場合、JSONファイルとして保存
-save_to_json(wikipedia_data, "wikipedia_data_ja.json")
+save_to_json(sections_data, "wikipedia_sections.json")
